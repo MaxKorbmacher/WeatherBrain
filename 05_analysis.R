@@ -6,11 +6,10 @@
 # -----------------Contents------------------------ #
 # ------------------------------------------------- #
 # 1. Prep------------------------------------------ #
-# 2. Correlates------------------------------------ #
+# 2. Global Correlates----------------------------- #
 # 2.1 Cross-sectional------------------------------ #
 # 2.2 Longitudinal--------------------------------- #
-# 4. Covariates of env-brain associations---------- #
-# 5. Compare models ------------------------------- #
+# 3. Regional Correlates--------------------------- #
 # ------------------------------------------------- #
 # ------------------------------------------------- #
 #
@@ -22,17 +21,43 @@
 
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(data.table, dplyr, ggplot2, reshape2,lme4,ggpubr,
-               psych, lmerTest, performance, broom, tidyr)
+               psych, lmerTest, performance, broom, tidyr,
+               gtsummary,ggrepel
+               )
 
 # 1.2 Load data------------------------------------
 
 # Specify the data path
+savepath = "/cluster/projects/p33/users/maxk/UKB/environment/results/"
 datapath = "/cluster/projects/p33/users/maxk/UKB/environment/data/"
 
 cross_env = read.csv(paste(datapath,"final_cross.csv",sep=""))
 long_env = read.csv(paste(datapath,"final_long.csv",sep=""))
 
-# 1.3 Reduce data: PCA FOR LONGITUDINAL ANALYSES!----------------------------------
+# 1.3 Demographics ------
+# remove 47 Bristol subs
+cross_env = cross_env %>% filter(site != "Bristol")
+# define outcomes and predictors (necessary for analyses)
+outcomes = cross_env %>% select(FA_Mean, MD_Mean, RD_Mean, AD_Mean,
+                                #                     "v_intra_Mean" ,          "v_extra_Mean"        ,   "v_csf_Mean"     ,        "micro_Rd_Mean"   ,       "micro_FA_Mean",         
+                                #                     "micro_Ax_Mean"      ,    "micro_ADC_Mean"      ,   "Dax_intra_Mean"     ,    "Dax_extra_Mean",
+                                CortexVol,CorticalWhiteMatterVol) %>% names
+
+
+predictors=cross_env %>% dplyr::select(ends_with("at_age"),"RDS1", "N1", 
+                                       "ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", "AD") %>% names
+# make summary table
+pgs_cols = c("ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", "AD")
+for (col in pgs_cols) {
+  new_col <- paste0(col, "_Z")
+  cross_env[[new_col]] <- as.vector(scale(cross_env[[col]]))
+}
+Zs =  c("ANX_Z", "ADHD_Z", "ASD_Z", "BIP_Z", "MDD_Z", "OCD_Z", "SCZ_Z", "AD_Z")
+tbl = cross_env %>% select(outcomes, Zs, RDS1, N1, age, sex,SurfaceHoles, EstimatedTotalIntraCranialVol, income, site) %>% tbl_summary(by=site)
+tbl |> as_gt() |> gt::gtsave(filename = paste(savepath,"Demographics.html",sep="")) # use extensions .png, .html, .docx, .rtf, .tex, .ltx
+tbl |> as_gt() |> gt::gtsave(filename = paste(savepath,"Demographics.tex",sep="")) # use extensions .png, .html, .docx, .rtf, .tex, .ltx
+
+# 1.4 Reduce data: PCA FOR LONGITUDINAL ANALYSES!----------------------------------
 print("#")
 print("#")
 print("#")
@@ -244,14 +269,6 @@ if (FALSE){
 results <- list()
 
 #outcomes = cross_env %>% select(ends_with("_Mean"),CortexVol,CorticalWhiteMatterVol) %>% names
-outcomes = cross_env %>% select(FA_Mean, MD_Mean, RD_Mean, AD_Mean,
-#                     "v_intra_Mean" ,          "v_extra_Mean"        ,   "v_csf_Mean"     ,        "micro_Rd_Mean"   ,       "micro_FA_Mean",         
-#                     "micro_Ax_Mean"      ,    "micro_ADC_Mean"      ,   "Dax_intra_Mean"     ,    "Dax_extra_Mean",
-                     CortexVol,CorticalWhiteMatterVol) %>% names
-
-
-predictors=cross_env %>% dplyr::select(ends_with("at_age"),"RDS1", "N1", 
-                                       "ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", "AD") %>% names
 
 # Standardize ONLY numeric predictors/outcomes (safe for factor predictors)
 cross_scaled <- cross_env %>% mutate(across(all_of(c(predictors, outcomes)), ~ if (is.numeric(.x)) as.numeric(scale(.x)) else .x))
@@ -483,9 +500,11 @@ p_cross = ggplot(cross_res, aes(x = outcome, y = predictor, fill = beta)) +
 
 # save figure and table
 ggsave(filename = "/tsd/p33/home/p33-maxk/p1.pdf",plot = p_cross, width = 10, height = 8)
-ggsave(filename = "/cluster/projects/p33/users/maxk/UKB/environment/results/Associations.pdf",plot = p_cross, width = 10, height = 8)
+ggsave(filename = paste(savepath,"Associations.pdf",sep=""),plot = p_cross, width = 10, height = 8)
+
 #
-write.csv(file = "/cluster/projects/p33/users/maxk/UKB/environment/results/correlates.csv",cross_res)
+
+write.csv(file = paste(savepath,"correlates.csv",sep=""),cross_res)
 #
 #
 # Show some descriptives of the correlational analysis
@@ -578,132 +597,422 @@ final_weather_lrt %>% group_by(added_var) %>% summarize(M = mean(abs(delta_r2)),
 final_weather_lrt %>% filter(p_corrected < 0.05)
 
 # # 2.2 Longitudinal---------------------------------
-# # outcomes = long_env %>% select(ends_with("_Mean"),CortexVol,CorticalWhiteMatterVol,BrainAge) %>% names
-# #predictors=c("si10","d2m","t2m","u10","v10","sp","avg_slhtf","avg_snswrf","avg_sdlwrf","avg_lsprate","uvb","avg_sdirswrf","avg_sduvrf","avg_snlwrf","tp")
+# outcomes = long_env %>% select(ends_with("_Mean"),CortexVol,CorticalWhiteMatterVol,BrainAge) %>% names
+outcomes = c(outcomes,"BrainAge")
+predictors=c("si10","d2m","t2m","u10","v10","sp","avg_slhtf","avg_snswrf","avg_sdlwrf","avg_lsprate","uvb","avg_sdirswrf","avg_sduvrf","avg_snlwrf","tp","RDS", "N", 
+                                       "ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", "AD")
 # 
-# # Loop over outcome and predictor combinations
-# associations = 
-#   function(data_frame){
-#     results <- list()
-#     for (outcome in outcomes) {
-#       for (predictor in predictors) {
-#         if (predictor != outcome) {
-#           # Standardize predictor and outcome within each time point
-#           df0 = data_frame %>% dplyr::select(sex,age)
-#           df_scaled = data_frame %>% dplyr::select(-sex,-age)
-#           df_scaled <- df_scaled %>%
-#             group_by(session) %>%
-#             mutate(
-#               !!outcome := scale(.data[[outcome]])[,1],
-#               !!predictor := scale(.data[[predictor]])[,1]
-#             ) %>%
-#             ungroup()
-#           df_scaled = cbind(df_scaled,df0)
-#           # Fit the mixed model
-#           formula_str <- paste0(outcome, " ~ ", predictor, " + sex + age +  SurfaceHoles + EstimatedTotalIntraCranialVol + income + (1|eid)")
-#           model <- lmer(as.formula(formula_str), data = df_scaled)
-#           
-#           # Extract summary and CI
-#           coef_summary <- summary(model)$coefficients
-#           ci <- suppressMessages(confint(model, parm = predictor, method = "Wald"))
-#           
-#           # Extract results
-#           std_beta <- coef_summary[predictor, "Estimate"]
-#           p_val    <- coef_summary[predictor, "Pr(>|t|)"]
-#           
-#           # Store results
-#           results[[paste0(outcome, "_by_", predictor)]] <- data.frame(
-#             outcome   = outcome,
-#             predictor = predictor,
-#             std_beta  = std_beta,
-#             conf_low  = ci[1],
-#             conf_high = ci[2],
-#             p_value   = p_val
-#           )
-#         }
-#       }
-#     }
-#     return(results)
-#   }
-# res = associations(long_env)
-# # Combine all results into one dataframe
-# final_df <- bind_rows(res)
-# 
-# # View result
-# print(final_df)
-# 
-# # corrected p-vals
-# final_df$p.correct = p.adjust(final_df$p_value,method="BH")
-# final_df = final_df %>% filter(p.correct<.05)
-# 
-# # check which predictors
-# levels(factor(final_df$predictor))
-# 
-# # summarise effects by predictor
-# final_df %>% group_by(predictor) %>% summarize(M = mean(abs(std_beta)), SD = sd(abs(std_beta)), Md = median(abs(std_beta)), MAD = mad(abs(std_beta)))
-# 
-# 
-# # largest effects detected for avg_lsprate, d2m, sp, t2m, tp
-# #
-# # avg_lsprate = Time-mean large-scale precipitation rate
-# # d2m = 2 metre dewpoint temperature
-# # sp = surface pressure
-# # t2m = 2 metre temperature
-# # tp = total precipation
-# 
-# # show only largest effects
-# final_df %>% filter(abs(std_beta) > 0.09) %>% arrange(predictor)
-# 
-# final_df <- final_df %>%
-#   mutate(sig_label = ifelse(p.correct < 0.05, "*", ""))
-# 
-# final_df$outcome = factor(final_df$outcome)
-# final_df$predictor = factor(final_df$predictor)
-# levels(final_df$outcome) = c("DTI-AD","DKI-AK","WMTI-AWF","Brain Age","CGMV","WMV",
-#                              "BRIA-DAXextra","BRIA-DAXintra","DTI-FA","DTI-MD", 
-#                              "BRIA-microADC","BRIA-microAX","BRIA-microFA","BRIA-microRD", 
-#                              "DKI-MK", "WMTI-radEAD", "DTI-RD", "DKI-RK", 
-#                              "SMT-FA", "SMT-long", "SMTmc-Diff", "SMTmc-extraMD", 
-#                              "SMTmc-extratrans", "SMTmc-intra", "SMT-MD", "SMT-trans", 
-#                              "BRIA-vCSF", "BRIA-vExtra", "BRIA-vIntra") 
-# # CGMV = Cortical grey matter volume, WMV = Cortical white matter volume
-# levels(final_df$predictor) = c("Time-mean large-scale precipitation rate", 
-#                                "Time-mean surface direct short-wave radiation flux",
-#                                "Time-mean surface downward long-wave radiation flux",
-#                                "Time-mean surface downward UV radiation flux",
-#                                "Time-mean surface latent heat flux",
-#                                "Time-mean surface net long-wave radiation flux",
-#                                "Time-mean surface net short-wave radiation flux",
-#                                "Surface net short-wave radiation flux",
-#                                "10 metre wind speed",
-#                                "Surface pressure",
-#                                "2 metre temperature",
-#                                "Total precipitation",
-#                                "10 metre U wind component",
-#                                "Surface downward UV radiation",
-#                                "10 metre V wind component"
-# )
-# # Tile plot
-# p1 = ggplot(final_df, aes(x = outcome, y = predictor, fill = std_beta)) +
-#   geom_tile(color = "grey80") +
-#   geom_text(aes(label = sig_label), size = 6, color = "black") +
-#   scale_fill_gradient2(
-#     low = "#a6bddb", mid = "white", high = "#fbb4b9",  # pastel blue to white to pastel red
-#     midpoint = 0,
-#     name = "Std. Beta",
-#     limits = c(min(final_df$std_beta), max(final_df$std_beta))  # consistent scale
-#   ) +
-#   #scale_x_discrete(labels = outcome_labels) +
-#   #scale_y_discrete(labels = predictor_labels) +
-#   theme_minimal(base_size = 14) +
-#   theme(
-#     axis.text.x = element_text(angle = 45, hjust = 1),
-#     panel.grid = element_blank()
-#   ) +
-#   labs(
-#     x = "Outcome",
-#     y = "Predictor",
-#     title = "Standardized Associations between Climate and Brain Variables"
-#   )
-# # ggsave(filename = "/tsd/p33/home/p33-maxk/p1.pdf",plot = p1, width = 12, height = 8)
-# # ggsave(filename = "/cluster/projects/p33/users/maxk/UKB/environment/results/p1.pdf",plot = p1, width = 12, height = 8)
+demo = read.csv(paste(datapath,"demo/environment.csv",sep=""))
+demo = rbind(demo %>% select(eid,X738.2.0) %>% rename(income = X738.2.0),demo %>% select(eid, X738.3.0)%>%rename(income=X738.3.0))
+long_env = merge(long_env,demo,by="eid")
+# Split into two dataframes and correlate
+# Split by session
+df_t1 <- long_env %>% filter(session == 1)  # or "T1", "baseline", etc.
+df_t2 <- long_env %>% filter(session == 2)  # or "T2", "followup", etc.
+
+# Select only numeric columns
+numeric_vars <- long_env %>% 
+  select(where(is.numeric)) %>% 
+  select(-session, -eid) %>%  # Remove ID and session
+  names()
+
+# Correlate numeric variables between sessions
+correlations <- sapply(numeric_vars, function(var) {
+  # Match by ID
+  merged <- inner_join(
+    df_t1 %>% select(eid, !!sym(var)) %>% rename(var_t1 = !!sym(var)),
+    df_t2 %>% select(eid, !!sym(var)) %>% rename(var_t2 = !!sym(var)),
+    by = "eid"
+  )
+  
+  cor(merged$var_t1, merged$var_t2, use = "complete.obs")
+})
+
+# View results
+print("Correlations between T1 and T2:")
+print(round(correlations, 3))
+
+
+
+
+# Loop over outcome and predictor combinations
+associations =
+  function(data_frame){
+    results <- list()
+    for (outcome in outcomes) {
+      for (predictor in predictors) {
+        if (predictor != outcome) {
+          # Standardize predictor and outcome within each time point
+          df0 = data_frame %>% dplyr::select(sex,age)
+          df_scaled = data_frame %>% dplyr::select(-sex,-age)
+          df_scaled <- df_scaled %>%
+            group_by(session) %>%
+            mutate(
+              !!outcome := scale(.data[[outcome]])[,1],
+              !!predictor := scale(.data[[predictor]])[,1]
+            ) %>%
+            ungroup()
+          df_scaled = cbind(df_scaled,df0)
+          # Fit the mixed model
+          formula_str <- paste0(outcome, " ~ ", predictor, " + sex + age +  SurfaceHoles + EstimatedTotalIntraCranialVol + income + (1|eid)")
+          model <- lmer(as.formula(formula_str), data = df_scaled)
+
+          # Extract summary and CI
+          coef_summary <- summary(model)$coefficients
+          ci <- suppressMessages(confint(model, parm = predictor, method = "Wald"))
+
+          # Extract results
+          std_beta <- coef_summary[predictor, "Estimate"]
+          p_val    <- coef_summary[predictor, "Pr(>|t|)"]
+
+          # Store results
+          results[[paste0(outcome, "_by_", predictor)]] <- data.frame(
+            outcome   = outcome,
+            predictor = predictor,
+            std_beta  = std_beta,
+            conf_low  = ci[1],
+            conf_high = ci[2],
+            p_value   = p_val
+          )
+        }
+      }
+    }
+    return(results)
+  }
+res = associations(long_env)
+# Combine all results into one dataframe
+final_df <- bind_rows(res)
+
+# View result
+print(final_df)
+# corrected p-vals
+final_df$p.correct = p.adjust(final_df$p_value,method="BH")
+#final_df = final_df %>% filter(p.correct<.05)
+
+# check which predictors
+levels(factor(final_df$predictor))
+
+# summarise effects by predictor
+final_df %>% group_by(predictor) %>% summarize(M = mean(abs(std_beta)), SD = sd(abs(std_beta)), Md = median(abs(std_beta)), MAD = mad(abs(std_beta)))
+
+
+# largest effects detected for avg_lsprate, d2m, sp, t2m, tp
+#
+# avg_lsprate = Time-mean large-scale precipitation rate
+# d2m = 2 metre dewpoint temperature
+# sp = surface pressure
+# t2m = 2 metre temperature
+# tp = total precipation
+
+# show only largest effects
+final_df %>% filter(abs(std_beta) > 0.05) %>% arrange(predictor)
+
+final_df <- final_df %>%
+  mutate(sig_label = ifelse(p.correct < 0.05, "*", ""))
+
+final_df$outcome = factor(final_df$outcome)
+final_df$predictor = factor(final_df$predictor)
+levels(final_df$outcome) = c("DTI-AD","Brain Age","CGMV","WMV",
+                              #"BRIA-DAXextra","BRIA-DAXintra",
+                              "DTI-FA","DTI-MD", 
+                              #"BRIA-microADC","BRIA-microAX","BRIA-microFA","BRIA-microRD", 
+                              "DTI-RD") 
+#"BRIA-vCSF", "BRIA-vExtra", "BRIA-vIntra") 
+# CGMV = Cortical grey matter volume, WMV = Cortical white matter volume
+levels(final_df$predictor) = c("PGRS: Alzheimer's Disease",
+                                "PGRS: Attention-Deficit/Hyperactivity Disorder",
+                                "PGRS: Anxiety Disorder",
+                                "PGRS: Autism Spectrum Disorder",
+                                "Weather: Time-mean large-scale precipitation rate", 
+                                "Weather: Time-mean surface direct short-wave radiation flux",
+                                "Weather: Time-mean surface downward long-wave radiation flux",
+                                "Weather: Time-mean surface downward UV radiation flux",
+                                "Weather: Time-mean surface latent heat flux",
+                                "Weather: Time-mean surface net long-wave radiation flux",
+                                "Weather: Time-mean surface net short-wave radiation flux",
+                                
+                                "PGRS: Bipolar Disorder",
+                                
+                                "Weather: Surface net short-wave radiation flux",
+                                
+                                "PGRS: Major Depressive Disorder",
+                                
+                                "Self-Reports: Neuroticism",
+                                
+                                "PGRS: Obsessive-Compulsive Disorder",
+                                
+                                "Self-Reports: Recent Depressive Symptoms",
+                                
+                                "PGRS: Schizophrenia",
+                                
+                                "Weather: 10 metre wind speed",
+                                "Weather: Surface pressure",
+                                "Weather: 2 metre temperature",
+                                "Weather: Total precipitation",
+                                "Weather: 10 metre U wind component",
+                                "Weather: Surface downward UV radiation",
+                                "Weather: 10 metre V wind component"
+)
+
+# Tile plot
+p2 = ggplot(final_df, aes(x = outcome, y = predictor, fill = std_beta)) +
+  geom_tile(color = "grey80") +
+  geom_text(aes(label = sig_label), size = 6, color = "black") +
+  scale_fill_gradient2(
+    low = "#a6bddb", mid = "white", high = "#fbb4b9",  # pastel blue to white to pastel red
+    midpoint = 0,
+    name = "Std. Beta",
+    limits = c(min(final_df$std_beta), max(final_df$std_beta))  # consistent scale
+  ) +
+  #scale_x_discrete(labels = outcome_labels) +
+  #scale_y_discrete(labels = predictor_labels) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid = element_blank()
+  ) +
+  labs(
+    x = "Outcome",
+    y = "Predictor"
+    #title = "Standardized Associations between Climate and Brain Variables"
+  ) + xlim(sort(levels(final_df$outcome))) + ylim(sort(levels(final_df$predictor)))
+ggsave(filename = "/tsd/p33/home/p33-maxk/p1.pdf",plot = p1, width = 10, height = 8)
+ggsave(filename = paste(savepath,"Longitudinal.pdf",sep=""),plot = p1, width = 10, height = 8)
+
+write.csv(file = paste(savepath,"correlates_long.csv",sep=""),final_df)
+
+
+# 3. Regional Correlates ------------
+# We use tracts! And we use GM regions
+outcomes = cross_env %>% select(FA_Mean, MD_Mean, RD_Mean, AD_Mean,
+                                CortexVol,CorticalWhiteMatterVol) %>% names
+T1w = read.csv("/cluster/projects/p33/users/maxk/UKB/data/T1w_50k/merged/T1_data.csv")
+T1w = T1w %>% filter(euler_mean < mean(euler_mean)+3*sd(euler_mean)) %>% select(-Sex,-Age,-Scanner)
+cross_env  = cross_env %>% select(!starts_with("Left")) %>% select(!starts_with("Right"))
+regional_df = merge(cross_env,T1w, by="eid")
+tracts = regional_df %>% select(ends_with("ATRL"),ends_with("ATRR"),
+                                ends_with("CSTL"),ends_with("CSTR"),
+                                ends_with("CINGL"),ends_with("CINGR"),
+                                ends_with("CGL"),ends_with("CGR"),
+                                ends_with("IFOFL"),ends_with("IFOFR"),
+                                ends_with("ILFL"),ends_with("ILFR"),
+                                ends_with("SLFL"),ends_with("SLFR"),
+                                ends_with("UFL"),ends_with("UFR"),
+                                ends_with("SLFTL"),ends_with("SLTFR"),
+                                ends_with("FMIN"),ends_with("FMAJ")) %>%
+  select(starts_with("AD_"), starts_with("MD_"), starts_with("RD_"), starts_with("FA_")) %>%
+  names()
+volumes = regional_df %>% select(starts_with("lh_"), starts_with("rh_"), 
+                                 starts_with("Right"), starts_with("Left")) %>%
+  select(!ends_with("area")) %>% select(!ends_with("thickness")) %>%
+  names
+# that gives us DTI scalars for tracts and volumes for DK atlas
+outcomes = c(volumes,tracts)
+# We define again predictors
+predictors=cross_env %>% dplyr::select(ends_with("at_age"),"RDS1", "N1", 
+                                       "ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", "AD") %>% names
+#
+#
+#
+#
+# Run models
+cross_scaled <- regional_df %>% mutate(across(all_of(c(predictors, outcomes)), ~ if (is.numeric(.x)) as.numeric(scale(.x)) else .x))
+cross_scaled$site = regional_df$site
+results <- list()
+lrt_results <- list()
+
+for (outcome in outcomes) {
+  for (predictor in predictors) {
+    if (predictor == outcome) next
+    
+    vars_needed <- c(outcome, predictor,
+                     "sex", "age", "SurfaceHoles", "EstimatedTotalIntraCranialVol.x", "income", "site")
+    
+    dat_sub <- regional_df %>%
+      select(all_of(vars_needed)) %>%
+      filter(complete.cases(.)) %>%
+      mutate(across(where(is.numeric), ~ as.numeric(scale(.x))))
+    
+    if (nrow(dat_sub) < 10) next
+    if (length(unique(dat_sub$income)) < 2) next
+    
+    # ------------------------
+    # Models
+    # ------------------------
+    full_f <- paste0(outcome, " ~ ", predictor,
+                     " + sex + age + SurfaceHoles + EstimatedTotalIntraCranialVol.x + income + site")
+    model_full <- lm(as.formula(full_f), data = dat_sub)
+    
+    reduced_income_f <- paste0(outcome, " ~ ", predictor,
+                               " + sex + age + SurfaceHoles + EstimatedTotalIntraCranialVol.x + site")
+    model_reduced_income <- lm(as.formula(reduced_income_f), data = dat_sub)
+    
+    td <- tidy(model_full, conf.int = TRUE)
+    
+    # ------------------------
+    # Predictor
+    # ------------------------
+    pred_exact <- td %>% filter(term == predictor)
+    if (nrow(pred_exact) == 1) {
+      std_beta_predictor <- pred_exact$estimate
+      conf_low_predictor <- pred_exact$conf.low
+      conf_high_predictor <- pred_exact$conf.high
+      p_value_predictor <- pred_exact$p.value
+      predictor_omnibus_p <- NA_real_
+    } else {
+      reduced_no_pred_f <- paste0(outcome, " ~ sex + age + SurfaceHoles + EstimatedTotalIntraCranialVol.x + income + site")
+      model_reduced_no_pred <- lm(as.formula(reduced_no_pred_f), data = dat_sub)
+      an_pred <- anova(model_reduced_no_pred, model_full)
+      predictor_omnibus_p <- an_pred$`Pr(>F)`[2]
+      
+      std_beta_predictor <- NA_real_
+      conf_low_predictor <- NA_real_
+      conf_high_predictor <- NA_real_
+      p_value_predictor <- NA_real_
+    }
+    
+    # ------------------------
+    # Likelihood ratio test (income)
+    # ------------------------
+    an_income <- anova(model_reduced_income, model_full)
+    
+    r2_full <- summary(model_full)$r.squared
+    r2_reduced <- summary(model_reduced_income)$r.squared
+    delta_r2 <- r2_full - r2_reduced
+    
+    lrt_results[[paste0(outcome, "_by_", predictor)]] <- data.frame(
+      outcome   = outcome,
+      predictor = predictor,
+      n_obs     = nrow(dat_sub),
+      df        = an_income$Df[2],
+      f_value   = an_income$F[2],
+      p_value   = an_income$`Pr(>F)`[2],
+      r2_full   = r2_full,
+      r2_reduced = r2_reduced,
+      delta_r2   = delta_r2,
+      stringsAsFactors = FALSE
+    )
+    
+    # ------------------------
+    # Store predictor + income together
+    # ------------------------
+    # results[[paste0(outcome, "_by_", predictor)]] <- income_results %>%
+    #   mutate(
+    #     std_beta_predictor = std_beta_predictor,
+    #     conf_low_predictor = conf_low_predictor,
+    #     conf_high_predictor = conf_high_predictor,
+    #     p_value_predictor = p_value_predictor,
+    #     predictor_omnibus_p = predictor_omnibus_p
+    #   )
+    # Only store in results if predictor is NOT income
+    if (!grepl("income", predictor, ignore.case = TRUE)) {
+      results[[paste0(outcome, "_", predictor)]] <- data.frame(
+        outcome = outcome,
+        predictor = predictor,
+        beta = std_beta_predictor,
+        conf_low <- conf_low_predictor,
+        conf_high <- conf_high_predictor,
+        p_value <- p_value_predictor
+      )
+    }
+  }
+}
+cross_res <- bind_rows(results)
+#
+#
+#
+#
+# plotting many to many relationships is difficult.
+# it is possible to select a single predictors such as the precipitation, which shows some of the strongest associations in global / whole brain associations
+#
+#
+# first we save all results
+write.csv(file = paste(savepath,"correlates_regional.csv",sep=""),cross_res)
+#
+#
+# now, we filter the data for total precipitation within the last month
+cross_res = cross_res %>% filter(predictor=="tp_at_age")
+
+# correct the p-val
+cross_res$p.correct = p.adjust(cross_res$p_value....p_value_predictor,method="BH")
+#cross_res = cross_res %>% filter(p.correct<.05)
+#
+# give a star label
+cross_res <- cross_res %>%
+  mutate(sig_label = ifelse(p.correct < 0.05, "*", ""))
+
+# log p vals
+cross_res$p.correct = -log10(cross_res$p.correct)
+# add a column of directionality for beta values / slopes
+cross_res$Slope <- "No relation (p > 0.05)"
+cross_res$Slope[cross_res$beta > 0 & cross_res$p.correct > -log10(0.05)] <- "Positive relation"
+cross_res$Slope[cross_res$beta < 0 & cross_res$p.correct > -log10(0.05)] <- "Negativel relation"
+#
+# edit names as well
+cross_res$defeature = ifelse(cross_res$p.correct>10,cross_res$outcome,NA)
+cross_res$defeature = gsub("_"," ", cross_res$defeature)
+cross_res$defeature = gsub("lh","left", cross_res$defeature)
+cross_res$defeature = gsub("rh","right", cross_res$defeature)
+# plot
+volcano1 = ggplot(data=cross_res, aes(x=beta, y=p.correct,col = Slope, label=defeature)) +
+  geom_point() +
+  theme_minimal() +
+  geom_text_repel(data = subset(cross_res, beta < -0.01),colour='black', nudge_x = -0.05, direction = "y", segment.size = 0.1, xlim = c(-0.15,-0.35))+ #c(-0.3,-0.6))+
+  geom_text_repel(data = subset(cross_res, beta > 0.01),colour='black', nudge_x = 0.05, direction = "y",segment.size = 0.1, xlim = c(0.15,0.35))+
+  scale_color_manual(values=c("#0072B2", "#999999","#D55E00", "#56B4E9", "#E69F00"))+
+  #scale_color_manual(values=c("#0072B2","#D55E00", "#999999", "#56B4E9", "#E69F00"))+
+  xlab("Corrected standardized effect of total precipitation")+ylab("-log10(FDR-corrected p)")+
+  xlim(-0.25,0.25)+
+  theme(legend.position="bottom")#+labs(title = "Associations of MRI features' lateralisation and age")
+#ggsave(filename = "/tsd/p33/home/p33-maxk/p2.pdf",plot = volcano1, width = 9, height = 7)
+ggsave(filename = paste(savepath,"Volcano_Total_Precipitation.pdf",sep=""),plot = volcano1, width = 9, height = 7)
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+# Do the same for 10-meter wind speed = si10_at_age
+cross_res <- bind_rows(results)
+#
+# now, we filter the data for total precipitation within the last month
+cross_res = cross_res %>% filter(predictor=="si10_at_age")
+
+# correct the p-val
+cross_res$p.correct = p.adjust(cross_res$p_value....p_value_predictor,method="BH")
+#cross_res = cross_res %>% filter(p.correct<.05)
+#
+# give a star label
+cross_res <- cross_res %>%
+  mutate(sig_label = ifelse(p.correct < 0.05, "*", ""))
+
+# log p vals
+cross_res$p.correct = -log10(cross_res$p.correct)
+# add a column of directionality for beta values / slopes
+cross_res$Slope <- "No relation (p > 0.05)"
+cross_res$Slope[cross_res$beta > 0 & cross_res$p.correct > -log10(0.05)] <- "Positive relation"
+cross_res$Slope[cross_res$beta < 0 & cross_res$p.correct > -log10(0.05)] <- "Negativel relation"
+#
+# edit names as well
+cross_res$defeature = ifelse(cross_res$p.correct>20,cross_res$outcome,NA)
+cross_res$defeature = gsub("_"," ", cross_res$defeature)
+cross_res$defeature = gsub("lh","left", cross_res$defeature)
+cross_res$defeature = gsub("rh","right", cross_res$defeature)
+# plot
+volcano2 = ggplot(data=cross_res, aes(x=beta, y=p.correct,col = Slope, label=defeature)) +
+  geom_point() +
+  theme_minimal() +
+  geom_text_repel(data = subset(cross_res, beta < -0.01),colour='black', nudge_x = -0.05, direction = "y", segment.size = 0.1, xlim = c(-0.15,-0.35))+ #c(-0.3,-0.6))+
+  geom_text_repel(data = subset(cross_res, beta > 0.01),colour='black', nudge_x = 0.05, direction = "y",segment.size = 0.1, xlim = c(0.15,0.35))+
+  scale_color_manual(values=c("#0072B2", "#999999","#D55E00", "#56B4E9", "#E69F00"))+
+  #scale_color_manual(values=c("#0072B2","#D55E00", "#999999", "#56B4E9", "#E69F00"))+
+  xlab("Corrected standardized effect of 10m Wind Speed")+ylab("-log10(FDR-corrected p)")+
+  xlim(-0.25,0.25)+
+  theme(legend.position="bottom")#+labs(title = "Associations of MRI features' lateralisation and age")
+#ggsave(filename = "/tsd/p33/home/p33-maxk/p3.pdf",plot = volcano2, width = 10, height = 7)
+ggsave(filename = paste(savepath,"Volcano_Wind_Speed.pdf",sep=""),plot = volcano2, width = 10, height = 7)

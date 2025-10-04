@@ -62,7 +62,7 @@ c2 = read.csv(paste(datapath,"env_data/two_timepoints/climate_data_two_timepoint
 ## diffusion
 dMRI_cross = read.csv("/cluster/projects/p33/users/maxk/UKB/longitudinal/data/brainage/cross_sectional.csv")
 dMRI_T1 = read.csv("/cluster/projects/p33/users/maxk/UKB/longitudinal/data/brainage/T1.csv")
-dMRI_T2 = read.csv("/cluster/projects/p33/users/maxk/UKB/longitudinal/data/brainage/T1.csv")
+dMRI_T2 = read.csv("/cluster/projects/p33/users/maxk/UKB/longitudinal/data/brainage/T2.csv")
 ## T1w
 T1w = read.delim("/cluster/projects/p33/users/maxk/UKB/data/T1w_50k/subcorticalstats.UKBB.txt",sep=" ")
 T1w_long = read.csv("/cluster/projects/p33/groups/imaging/ukbio_R/recon/aseg_stats.txt",sep="\t")
@@ -141,7 +141,6 @@ long_env = rbind(T1_env,T2_env, fill=T)
 cross_env = merge(c1,c2, by = "eid")
 cross_env = merge(cross_env,dMRI_cross, by = "eid")
 cross_env = merge(cross_env,T1w, by = "eid")
-
 
 # add covariates
 # mental health
