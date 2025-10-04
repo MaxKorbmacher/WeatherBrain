@@ -37,6 +37,7 @@ long_env = read.csv(paste(datapath,"final_long.csv",sep=""))
 # 1.3 Demographics ------
 # remove 47 Bristol subs
 cross_env = cross_env %>% filter(site != "Bristol")
+
 # define outcomes and predictors (necessary for analyses)
 outcomes = cross_env %>% select(FA_Mean, MD_Mean, RD_Mean, AD_Mean,
                                 #                     "v_intra_Mean" ,          "v_extra_Mean"        ,   "v_csf_Mean"     ,        "micro_Rd_Mean"   ,       "micro_FA_Mean",         
@@ -56,6 +57,30 @@ Zs =  c("ANX_Z", "ADHD_Z", "ASD_Z", "BIP_Z", "MDD_Z", "OCD_Z", "SCZ_Z", "AD_Z")
 tbl = cross_env %>% select(outcomes, Zs, RDS1, N1, age, sex,SurfaceHoles, EstimatedTotalIntraCranialVol, income, site) %>% tbl_summary(by=site)
 tbl |> as_gt() |> gt::gtsave(filename = paste(savepath,"Demographics.html",sep="")) # use extensions .png, .html, .docx, .rtf, .tex, .ltx
 tbl |> as_gt() |> gt::gtsave(filename = paste(savepath,"Demographics.tex",sep="")) # use extensions .png, .html, .docx, .rtf, .tex, .ltx
+#
+#
+# outcomes = long_env %>% select(ends_with("_Mean"),CortexVol,CorticalWhiteMatterVol,BrainAge) %>% names
+demo = read.csv(paste(datapath,"demo/environment.csv",sep=""))
+demo = rbind(demo %>% select(eid,X738.2.0) %>% rename(income = X738.2.0),demo %>% select(eid, X738.3.0)%>%rename(income=X738.3.0))
+long_env = merge(long_env,demo,by="eid")
+
+# The same for long data
+long_env=long_env %>% filter(site != "Bristol")
+time2 = long_env %>% filter(session>1)
+# define outcomes
+outcomes = c(outcomes,"BrainAge")
+predictors=c("si10","d2m","t2m","u10","v10","sp","avg_slhtf","avg_snswrf","avg_sdlwrf","avg_lsprate","uvb","avg_sdirswrf","avg_sduvrf","avg_snlwrf","tp","RDS", "N", 
+             "ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", "AD")
+# 
+# make summary table
+for (col in pgs_cols) {
+  new_col <- paste0(col, "_Z")
+  time2[[new_col]] <- as.vector(scale(time2[[col]]))
+}
+
+tbl = time2 %>% select(outcomes, Zs, RDS, N, age, sex,SurfaceHoles, EstimatedTotalIntraCranialVol, income, site) %>% tbl_summary(by=site)
+tbl |> as_gt() |> gt::gtsave(filename = paste(savepath,"Demographics_long.html",sep="")) # use extensions .png, .html, .docx, .rtf, .tex, .ltx
+tbl |> as_gt() |> gt::gtsave(filename = paste(savepath,"Demographics-long.tex",sep="")) # use extensions .png, .html, .docx, .rtf, .tex, .ltx
 
 # 1.4 Reduce data: PCA FOR LONGITUDINAL ANALYSES!----------------------------------
 print("#")
@@ -597,14 +622,6 @@ final_weather_lrt %>% group_by(added_var) %>% summarize(M = mean(abs(delta_r2)),
 final_weather_lrt %>% filter(p_corrected < 0.05)
 
 # # 2.2 Longitudinal---------------------------------
-# outcomes = long_env %>% select(ends_with("_Mean"),CortexVol,CorticalWhiteMatterVol,BrainAge) %>% names
-outcomes = c(outcomes,"BrainAge")
-predictors=c("si10","d2m","t2m","u10","v10","sp","avg_slhtf","avg_snswrf","avg_sdlwrf","avg_lsprate","uvb","avg_sdirswrf","avg_sduvrf","avg_snlwrf","tp","RDS", "N", 
-                                       "ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", "AD")
-# 
-demo = read.csv(paste(datapath,"demo/environment.csv",sep=""))
-demo = rbind(demo %>% select(eid,X738.2.0) %>% rename(income = X738.2.0),demo %>% select(eid, X738.3.0)%>%rename(income=X738.3.0))
-long_env = merge(long_env,demo,by="eid")
 # Split into two dataframes and correlate
 # Split by session
 df_t1 <- long_env %>% filter(session == 1)  # or "T1", "baseline", etc.
@@ -1016,3 +1033,5 @@ volcano2 = ggplot(data=cross_res, aes(x=beta, y=p.correct,col = Slope, label=def
   theme(legend.position="bottom")#+labs(title = "Associations of MRI features' lateralisation and age")
 #ggsave(filename = "/tsd/p33/home/p33-maxk/p3.pdf",plot = volcano2, width = 10, height = 7)
 ggsave(filename = paste(savepath,"Volcano_Wind_Speed.pdf",sep=""),plot = volcano2, width = 10, height = 7)
+
+
