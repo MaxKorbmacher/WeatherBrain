@@ -46,14 +46,19 @@ outcomes = cross_env %>% select(FA_Mean, MD_Mean, RD_Mean, AD_Mean,
 
 
 predictors=cross_env %>% dplyr::select(ends_with("at_age"),"RDS1", "N1", 
-                                       "ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", "AD") %>% names
+                                       #"ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", 
+                                       "AD") %>% names
 # make summary table
-pgs_cols = c("ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", "AD")
+pgs_cols = c(
+  #"ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", 
+             "AD")
 for (col in pgs_cols) {
   new_col <- paste0(col, "_Z")
   cross_env[[new_col]] <- as.vector(scale(cross_env[[col]]))
 }
-Zs =  c("ANX_Z", "ADHD_Z", "ASD_Z", "BIP_Z", "MDD_Z", "OCD_Z", "SCZ_Z", "AD_Z")
+Zs =  c(
+  #"ANX_Z", "ADHD_Z", "ASD_Z", "BIP_Z", "MDD_Z", "OCD_Z", "SCZ_Z", 
+        "AD_Z")
 tbl = cross_env %>% select(outcomes, Zs, RDS1, N1, age, sex,SurfaceHoles, EstimatedTotalIntraCranialVol, income, site) %>% tbl_summary(by=site)
 tbl |> as_gt() |> gt::gtsave(filename = paste(savepath,"Demographics.html",sep="")) # use extensions .png, .html, .docx, .rtf, .tex, .ltx
 tbl |> as_gt() |> gt::gtsave(filename = paste(savepath,"Demographics.tex",sep="")) # use extensions .png, .html, .docx, .rtf, .tex, .ltx
@@ -68,9 +73,28 @@ long_env = merge(long_env,demo,by="eid")
 long_env=long_env %>% filter(site != "Bristol")
 time2 = long_env %>% filter(session>1)
 # define outcomes
-outcomes = c(outcomes,"BrainAge")
-predictors=c("si10","d2m","t2m","u10","v10","sp","avg_slhtf","avg_snswrf","avg_sdlwrf","avg_lsprate","uvb","avg_sdirswrf","avg_sduvrf","avg_snlwrf","tp","RDS", "N", 
-             "ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", "AD")
+outcomes = c(outcomes)
+weather_base <- c("si10", # 10-metre wind speed
+                  #"d2m",
+                  "t2m", # 2-metre temperature
+                  #"u10","v10",
+                  "sp", # surface pressure
+                  #"avg_slhtf","avg_snswrf","avg_sdlwrf","avg_lsprate",
+                  "uvb", # Surface downward UV radiation
+                  #"avg_sdirswrf","avg_sduvrf","avg_snlwrf",
+                  "tp") # Total precipitation
+
+## Add the "_at_age" suffix
+weather_vars <- paste0(weather_base, "_at_age")
+
+
+
+predictors=c(weather_vars,
+             "RDS1", "N1", 
+             #"ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", 
+             "AD")
+## Base names of weather predictors
+
 # 
 # make summary table
 for (col in pgs_cols) {
@@ -290,7 +314,7 @@ if (FALSE){
 # 
 # ggarrange(plot1, plot2)
 # 
-# 2.1.1 Linear models accounting for covariates and testing for income as a strong predictor ----
+# 2.1.1 Linear models accounting for covariates ----
 results <- list()
 
 #outcomes = cross_env %>% select(ends_with("_Mean"),CortexVol,CorticalWhiteMatterVol) %>% names
@@ -398,50 +422,14 @@ for (outcome in outcomes) {
   }
 }
 cross_res <- bind_rows(results)
-#
-#
-#
-#
-#
-########### OLD
-# 
-# # Loop over outcome and predictor pairs
-# # Create a standardized version of the data
-# cross_scaled <- cross_env %>%
-#   mutate(across(all_of(c(predictors, outcomes)), scale))
-# # Loop through all (outcome, predictor) pairs
-# for (outcome in outcomes) {
-#   for (predictor in predictors) {
-#     if (predictor != outcome) {
-#       
-#       # Fit linear model
-#       formula_str <- paste0(outcome, " ~ ", predictor," + sex + age + SurfaceHoles + EstimatedTotalIntraCranialVol + income + site")
-#       model <- lm(as.formula(formula_str), data = cross_scaled)
-#       
-#       # Tidy output and extract relevant row
-#       coef_df <- tidy(model, conf.int = TRUE) %>%
-#         filter(term == predictor)
-#       
-#       # Store result
-#       results[[paste0(outcome, "_by_", predictor)]] <- data.frame(
-#         outcome   = outcome,
-#         predictor = predictor,
-#         std_beta  = coef_df$estimate,
-#         conf_low  = coef_df$conf.low,
-#         conf_high = coef_df$conf.high,
-#         p_value   = coef_df$p.value
-#       )
-#     }
-#   }
-# }
 
 # corrected p-vals
-
 cross_res$p.correct = p.adjust(cross_res$p_value....p_value_predictor,method="BH")
 #cross_res = cross_res %>% filter(p.correct<.05)
 
 # summarise effects by predictor
 cross_res %>% group_by(predictor) %>% summarize(M = mean(abs(beta)), SD = sd(abs(beta)), Md = median(abs(beta)), MAD = mad(abs(beta)))
+
 
 cross_res <- cross_res %>%
   mutate(sig_label = ifelse(p.correct < 0.05, "*", ""))
@@ -463,40 +451,33 @@ levels(cross_res$outcome) = c("DTI-AD","CGMV","WMV",
                               "DTI-RD") 
                               #"BRIA-vCSF", "BRIA-vExtra", "BRIA-vIntra") 
 # CGMV = Cortical grey matter volume, WMV = Cortical white matter volume
-levels(cross_res$predictor) = c("PGRS: Alzheimer's Disease",
-                                "PGRS: Attention-Deficit/Hyperactivity Disorder",
-                                "PGRS: Anxiety Disorder",
-                                "PGRS: Autism Spectrum Disorder",
-                                "Weather: Time-mean large-scale precipitation rate", 
-                               "Weather: Time-mean surface direct short-wave radiation flux",
-                               "Weather: Time-mean surface downward long-wave radiation flux",
-                               "Weather: Time-mean surface downward UV radiation flux",
-                               "Weather: Time-mean surface latent heat flux",
-                               "Weather: Time-mean surface net long-wave radiation flux",
-                               "Weather: Time-mean surface net short-wave radiation flux",
-                               
-                               "PGRS: Bipolar Disorder",
-                               
-                               "Weather: Surface net short-wave radiation flux",
-                               
-                               "PGRS: Major Depressive Disorder",
-                               
-                               "Self-Reports: Neuroticism",
-                               
-                               "PGRS: Obsessive-Compulsive Disorder",
-                               
-                               "Self-Reports: Recent Depressive Symptoms",
-                               
-                               "PGRS: Schizophrenia",
-                               
-                               "Weather: 10 metre wind speed",
-                               "Weather: Surface pressure",
-                               "Weather: 2 metre temperature",
-                               "Weather: Total precipitation",
-                               "Weather: 10 metre U wind component",
-                               "Weather: Surface downward UV radiation",
-                               "Weather: 10 metre V wind component"
+figure_levels = c("b) Alzheimer's Disease",
+                                # "b) Attention-Deficit/Hyperactivity Disorder",
+                                # "b) Anxiety Disorder",
+                                # "b) Autism Spectrum Disorder",
+                                # "a) Time-mean large-scale precipitation rate", 
+                               # "a) Time-mean surface direct short-wave radiation flux",
+                               # "a) Time-mean surface downward long-wave radiation flux",
+                               # "a) Time-mean surface downward UV radiation flux",
+                               # "a) Time-mean surface latent heat flux",
+                               # "a) Time-mean surface net long-wave radiation flux",
+                               # "a) Time-mean surface net short-wave radiation flux",
+                               # "b) Bipolar Disorder",
+                               # "a) Surface net short-wave radiation flux",
+                               # "b) Major Depressive Disorder",
+                               "c) Neuroticism",
+                               # "b) Obsessive-Compulsive Disorder",
+                               "c) Recent Depressive Symptoms",
+                               # "b) Schizophrenia",
+                               "a) 10 metre wind speed",
+                               "a) Surface pressure",
+                               "a) 2 metre temperature",
+                               "a) Total precipitation",
+                               # "a) 10 metre U wind component",
+                               "a) Surface downward UV radiation"
+                               # "a) 10 metre V wind component"
 )
+levels(cross_res$predictor) = figure_levels
 
 
 # plot
@@ -521,11 +502,11 @@ p_cross = ggplot(cross_res, aes(x = outcome, y = predictor, fill = beta)) +
     y = "Predictor"
     #,title = "Standardized Associations between Climate and Brain Variables"
   ) +
-  xlim(sort(levels(cross_res$outcome))) + ylim(sort(levels(cross_res$predictor)))
+  xlim(sort(levels(cross_res$outcome),decreasing = F)) + ylim(sort(levels(cross_res$predictor),decreasing = T))
 
 # save figure and table
-ggsave(filename = "/tsd/p33/home/p33-maxk/p1.pdf",plot = p_cross, width = 10, height = 8)
-ggsave(filename = paste(savepath,"Associations.pdf",sep=""),plot = p_cross, width = 10, height = 8)
+ggsave(filename = "/tsd/p33/home/p33-maxk/p1.pdf",plot = p_cross, width = 8, height = 6)
+ggsave(filename = paste(savepath,"Associations.pdf",sep=""),plot = p_cross, width = 8, height = 6)
 
 #
 
@@ -533,28 +514,21 @@ write.csv(file = paste(savepath,"correlates.csv",sep=""),cross_res)
 #
 #
 # Show some descriptives of the correlational analysis
-filter(cross_res, grepl("Weather",predictor)) %>% summarise(Md = median(abs(beta)), MAD = mad(abs(beta)))
-filter(cross_res, grepl("PGRS",predictor)) %>% summarise(Md = median(abs(beta)), MAD = mad(abs(beta)))
-filter(cross_res, grepl("Self-Reports",predictor)) %>% summarise(Md = median(abs(beta)), MAD = mad(abs(beta)))
+filter(cross_res, grepl("a",predictor)) %>% summarise(Md = median(abs(beta)), MAD = mad(abs(beta)))
+filter(cross_res, grepl("b",predictor)) %>% summarise(Md = median(abs(beta)), MAD = mad(abs(beta)))
+filter(cross_res, grepl("c",predictor)) %>% summarise(Md = median(abs(beta)), MAD = mad(abs(beta)))
 #
 #
 # 2.1.2 LRTs---------------------------------
 # Goal here is to compare a comparison model containing each predictor of interest with the respective
 ## re-define predictors
 predictors=cross_env %>% dplyr::select(ends_with("at_age"),"RDS1", "N1", 
-                                       "ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", "AD") %>% names
-
-## Base names of weather predictors
-weather_base <- c("si10","d2m","t2m","u10","v10","sp","avg_slhtf","avg_snswrf",
-                  "avg_sdlwrf","avg_lsprate","uvb","avg_sdirswrf","avg_sduvrf",
-                  "avg_snlwrf","tp")
-
-## Add the "_at_age" suffix
-weather_vars <- paste0(weather_base, "_at_age")
+                                       #"ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", 
+                                       "AD") %>% names
 
 ## Everything else from predictors is "other"
-other_vars <- setdiff(predictors, weather_vars)
-
+other_vars = setdiff(predictors, weather_vars)
+other_vars = other_vars[!grepl("at_age",other_vars)]
 lrt_weather <- list()
 
 ## loop trough the list comparing models with or without added PGRS or self-reported scores.
@@ -621,6 +595,9 @@ write.csv(file = "/cluster/projects/p33/users/maxk/UKB/environment/results/LRT.c
 final_weather_lrt %>% group_by(added_var) %>% summarize(M = mean(abs(delta_r2)), SD = sd(abs(delta_r2)), Md = median(abs(delta_r2)), MAD = mad(abs(delta_r2)))
 final_weather_lrt %>% filter(p_corrected < 0.05)
 
+# percentage significant contributions
+final_weather_lrt %>% filter(p_corrected < 0.05) %>% nrow() / nrow(final_weather_lrt)
+
 # # 2.2 Longitudinal---------------------------------
 # Split into two dataframes and correlate
 # Split by session
@@ -649,9 +626,8 @@ correlations <- sapply(numeric_vars, function(var) {
 print("Correlations between T1 and T2:")
 print(round(correlations, 3))
 
-
-
-
+predictors = c(weather_base, "N", "RDS", "AD")
+outcomes = c(outcomes,"BrainAge")
 # Loop over outcome and predictor combinations
 associations =
   function(data_frame){
@@ -713,12 +689,9 @@ levels(factor(final_df$predictor))
 final_df %>% group_by(predictor) %>% summarize(M = mean(abs(std_beta)), SD = sd(abs(std_beta)), Md = median(abs(std_beta)), MAD = mad(abs(std_beta)))
 
 
-# largest effects detected for avg_lsprate, d2m, sp, t2m, tp
-#
-# avg_lsprate = Time-mean large-scale precipitation rate
-# d2m = 2 metre dewpoint temperature
+# largest effects detected for tp, sp, uvb
+# uvb = UV radiation
 # sp = surface pressure
-# t2m = 2 metre temperature
 # tp = total precipation
 
 # show only largest effects
@@ -734,43 +707,7 @@ levels(final_df$outcome) = c("DTI-AD","Brain Age","CGMV","WMV",
                               "DTI-FA","DTI-MD", 
                               #"BRIA-microADC","BRIA-microAX","BRIA-microFA","BRIA-microRD", 
                               "DTI-RD") 
-#"BRIA-vCSF", "BRIA-vExtra", "BRIA-vIntra") 
-# CGMV = Cortical grey matter volume, WMV = Cortical white matter volume
-levels(final_df$predictor) = c("PGRS: Alzheimer's Disease",
-                                "PGRS: Attention-Deficit/Hyperactivity Disorder",
-                                "PGRS: Anxiety Disorder",
-                                "PGRS: Autism Spectrum Disorder",
-                                "Weather: Time-mean large-scale precipitation rate", 
-                                "Weather: Time-mean surface direct short-wave radiation flux",
-                                "Weather: Time-mean surface downward long-wave radiation flux",
-                                "Weather: Time-mean surface downward UV radiation flux",
-                                "Weather: Time-mean surface latent heat flux",
-                                "Weather: Time-mean surface net long-wave radiation flux",
-                                "Weather: Time-mean surface net short-wave radiation flux",
-                                
-                                "PGRS: Bipolar Disorder",
-                                
-                                "Weather: Surface net short-wave radiation flux",
-                                
-                                "PGRS: Major Depressive Disorder",
-                                
-                                "Self-Reports: Neuroticism",
-                                
-                                "PGRS: Obsessive-Compulsive Disorder",
-                                
-                                "Self-Reports: Recent Depressive Symptoms",
-                                
-                                "PGRS: Schizophrenia",
-                                
-                                "Weather: 10 metre wind speed",
-                                "Weather: Surface pressure",
-                                "Weather: 2 metre temperature",
-                                "Weather: Total precipitation",
-                                "Weather: 10 metre U wind component",
-                                "Weather: Surface downward UV radiation",
-                                "Weather: 10 metre V wind component"
-)
-
+levels(final_df$predictor) = figure_levels
 # Tile plot
 p2 = ggplot(final_df, aes(x = outcome, y = predictor, fill = std_beta)) +
   geom_tile(color = "grey80") +
@@ -792,18 +729,17 @@ p2 = ggplot(final_df, aes(x = outcome, y = predictor, fill = std_beta)) +
     x = "Outcome",
     y = "Predictor"
     #title = "Standardized Associations between Climate and Brain Variables"
-  ) + xlim(sort(levels(final_df$outcome))) + ylim(sort(levels(final_df$predictor)))
-ggsave(filename = "/tsd/p33/home/p33-maxk/p1.pdf",plot = p1, width = 10, height = 8)
-ggsave(filename = paste(savepath,"Longitudinal.pdf",sep=""),plot = p1, width = 10, height = 8)
+  ) + xlim(sort(levels(final_df$outcome),decreasing = F)) + ylim(sort(levels(final_df$predictor),decreasing = T))
 
+ggsave(filename = "/tsd/p33/home/p33-maxk/p2.pdf",plot = p2, width = 8, height = 6)
+ggsave(filename = paste(savepath,"Longitudinal.pdf",sep=""),plot = p2, width = 8, height = 6)
 write.csv(file = paste(savepath,"correlates_long.csv",sep=""),final_df)
-
 
 # 3. Regional Correlates ------------
 # We use tracts! And we use GM regions
 outcomes = cross_env %>% select(FA_Mean, MD_Mean, RD_Mean, AD_Mean,
                                 CortexVol,CorticalWhiteMatterVol) %>% names
-T1w = read.csv("/cluster/projects/p33/users/maxk/UKB/data/T1w_50k/merged/T1_data.csv")
+T1w = read.csv("/ess/p33/cluster/ukbio_users/maxk/data/T1w_50k/merged/T1_data.csv")
 T1w = T1w %>% filter(euler_mean < mean(euler_mean)+3*sd(euler_mean)) %>% select(-Sex,-Age,-Scanner)
 cross_env  = cross_env %>% select(!starts_with("Left")) %>% select(!starts_with("Right"))
 regional_df = merge(cross_env,T1w, by="eid")
@@ -826,8 +762,10 @@ volumes = regional_df %>% select(starts_with("lh_"), starts_with("rh_"),
 # that gives us DTI scalars for tracts and volumes for DK atlas
 outcomes = c(volumes,tracts)
 # We define again predictors
-predictors=cross_env %>% dplyr::select(ends_with("at_age"),"RDS1", "N1", 
-                                       "ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", "AD") %>% names
+predictors=c(weather_vars,
+             "RDS1", "N1", 
+             #"ANX", "ADHD", "ASD", "BIP", "MDD", "OCD", "SCZ", 
+             "AD")
 #
 #
 #
@@ -1033,5 +971,55 @@ volcano2 = ggplot(data=cross_res, aes(x=beta, y=p.correct,col = Slope, label=def
   theme(legend.position="bottom")#+labs(title = "Associations of MRI features' lateralisation and age")
 #ggsave(filename = "/tsd/p33/home/p33-maxk/p3.pdf",plot = volcano2, width = 10, height = 7)
 ggsave(filename = paste(savepath,"Volcano_Wind_Speed.pdf",sep=""),plot = volcano2, width = 10, height = 7)
+
+
+
+
+#
+# Do the same for surface pressure = sp
+cross_res <- bind_rows(results)
+#
+# now, we filter the data for total precipitation within the last month
+cross_res = cross_res %>% filter(predictor=="sp_at_age")
+
+# correct the p-val
+cross_res$p.correct = p.adjust(cross_res$p_value....p_value_predictor,method="BH")
+#cross_res = cross_res %>% filter(p.correct<.05)
+#
+# give a star label
+cross_res <- cross_res %>%
+  mutate(sig_label = ifelse(p.correct < 0.05, "*", ""))
+
+# log p vals
+cross_res$p.correct = -log10(cross_res$p.correct)
+# add a column of directionality for beta values / slopes
+cross_res$Slope <- "No relation (p > 0.05)"
+cross_res$Slope[cross_res$beta > 0 & cross_res$p.correct > -log10(0.05)] <- "Positive relation"
+cross_res$Slope[cross_res$beta < 0 & cross_res$p.correct > -log10(0.05)] <- "Negativel relation"
+#
+# edit names as well
+cross_res$defeature = ifelse(cross_res$p.correct>20,cross_res$outcome,NA)
+cross_res$defeature = gsub("_"," ", cross_res$defeature)
+cross_res$defeature = gsub("lh","left", cross_res$defeature)
+cross_res$defeature = gsub("rh","right", cross_res$defeature)
+# plot
+volcano3 = ggplot(data=cross_res, aes(x=beta, y=p.correct,col = Slope, label=defeature)) +
+  geom_point() +
+  theme_minimal() +
+  geom_text_repel(data = subset(cross_res, beta < -0.01),colour='black', nudge_x = -0.05, direction = "y", segment.size = 0.1, xlim = c(-0.15,-0.35))+ #c(-0.3,-0.6))+
+  geom_text_repel(data = subset(cross_res, beta > 0.01),colour='black', nudge_x = 0.05, direction = "y",segment.size = 0.1, xlim = c(0.15,0.35))+
+  scale_color_manual(values=c("#0072B2", "#999999","#D55E00", "#56B4E9", "#E69F00"))+
+  #scale_color_manual(values=c("#0072B2","#D55E00", "#999999", "#56B4E9", "#E69F00"))+
+  xlab("Corrected standardized effect of Surface Pressure")+ylab("-log10(FDR-corrected p)")+
+  xlim(-0.25,0.25)+
+  theme(legend.position="bottom")#+labs(title = "Associations of MRI features' lateralisation and age")
+ggsave(filename = "/tsd/p33/home/p33-maxk/p3.pdf",plot = volcano3, width = 10, height = 7)
+ggsave(filename = paste(savepath,"Volcano_Surface_Pressure.pdf",sep=""),plot = volcano3, width = 10, height = 7)
+
+# investigate region of strongest association: ILF
+cross_res <- bind_rows(results)
+cross_res = cross_res[grepl("ILF",cross_res$outcome),]
+min(abs(cross_res$beta))
+max(abs(cross_res$beta))
 
 
